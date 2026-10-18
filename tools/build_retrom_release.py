@@ -86,7 +86,10 @@ def main():
         raise ValueError("SIGLUS_RELEASE_TAG_INVALID")
     subprocess.run(["git", "merge-base", "--is-ancestor", BASELINE, "HEAD"], cwd=ROOT, check=True)
     if "--check" not in sys.argv:
-        if git("cat-file", "-t", "refs/tags/" + tag) != "tag" or git("rev-list", "-n", "1", tag) != git("rev-parse", "HEAD"):
+        reference = os.environ.get("RETROM_RELEASE_TAG_REF", "refs/tags/" + tag)
+        if reference not in ("refs/tags/" + tag, "refs/retrom-release/" + tag):
+            raise ValueError("SIGLUS_RELEASE_TAG_REF_INVALID")
+        if git("cat-file", "-t", reference) != "tag" or git("rev-list", "-n", "1", reference) != git("rev-parse", "HEAD"):
             raise ValueError("SIGLUS_ANNOTATED_TAG_REQUIRED")
         subprocess.run(["git", "merge-base", "--is-ancestor", "HEAD", "retrom/g5f358ef1360b"], cwd=ROOT, check=True)
     sys.argv = [sys.argv[0], str(output)]

@@ -46,7 +46,7 @@ source archive and `rpg-runtime-release.json`. Never move a tag or replace its
 assets. Verify all manifest sizes/hashes before pinning the release in runtime.
 
 ```sh
-python3 tools/build_retrom_release.py /absolute/empty/output retrom-core-g5f358ef1360b-r1 --check
+python3 tools/build_retrom_release.py /absolute/empty/output retrom-core-g5f358ef1360b-r2 --check
 python3 tools/build_retrom_release.py /absolute/output --verify
 ```
 
