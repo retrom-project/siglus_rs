@@ -29,9 +29,14 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - run: sudo apt-get update && sudo apt-get install -y libasound2-dev libudev-dev
       - name: Install exact bindgen
-        run: cargo install wasm-bindgen-cli --version 0.2.111 --locked
+        run: |
+          curl --fail --location --retry 3 https://github.com/wasm-bindgen/wasm-bindgen/releases/download/0.2.111/wasm-bindgen-0.2.111-x86_64-unknown-linux-musl.tar.gz -o "$RUNNER_TEMP/bindgen.tar.gz"
+          echo "0befb04f7e7a7404291749f1d2cda80b99165fe3e33b839bd67290c434c5626e  $RUNNER_TEMP/bindgen.tar.gz" | sha256sum --check
+          tar -xzf "$RUNNER_TEMP/bindgen.tar.gz" -C "$RUNNER_TEMP"
+          echo "$RUNNER_TEMP/wasm-bindgen-0.2.111-x86_64-unknown-linux-musl" >> "$GITHUB_PATH"
       - name: Prepare licensed font and run native regressions
         run: |
+          python3 -m unittest discover -s tools -p test_retrom_release.py
           python3 -c 'import sys; sys.path.insert(0,"tools"); from build_retrom_candidate import font_inputs; font_inputs()'
           printf 'pcm.!default { type null }\n' > "$RUNNER_TEMP/alsa-null.conf"
           export ALSA_CONFIG_PATH="$RUNNER_TEMP/alsa-null.conf"
@@ -42,9 +47,11 @@ jobs:
           set -euo pipefail
           if [[ "$GITHUB_REF_TYPE" = tag ]]; then
             git branch retrom/g5f358ef1360b origin/retrom/g5f358ef1360b
-            python3 tools/build_retrom_release.py "$RUNNER_TEMP/retrom-release" "$GITHUB_REF_NAME"
+            raw_tag_ref="refs/retrom-release/$GITHUB_REF_NAME"
+            git fetch --no-tags origin "refs/tags/$GITHUB_REF_NAME:$raw_tag_ref"
+            RETROM_RELEASE_TAG_REF="$raw_tag_ref" python3 tools/build_retrom_release.py "$RUNNER_TEMP/retrom-release" "$GITHUB_REF_NAME"
           else
-            python3 tools/build_retrom_release.py "$RUNNER_TEMP/retrom-release" retrom-core-g5f358ef1360b-r1-rc.1 --check
+            python3 tools/build_retrom_release.py "$RUNNER_TEMP/retrom-release" retrom-core-g5f358ef1360b-r2-rc.1 --check
           fi
           python3 tools/build_retrom_release.py "$RUNNER_TEMP/retrom-release" --verify
       - name: Real browser JSPI voice regression
