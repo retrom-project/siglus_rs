@@ -11,7 +11,8 @@ import tarfile
 import tempfile
 from build_retrom_candidate import ROOT, digest, font_inputs, git, main as build_candidate, source_digest
 
-ASSETS = ("siglus.mjs", "siglus_bg.wasm", "LICENSE-MPL-2.0", "FONT-OFL.txt", "THIRD-PARTY-NOTICES.md")
+ASSETS = ("siglus.mjs", "siglus_bg.wasm", "LICENSE-MPL-2.0", "FONT-OFL.txt", "THIRD-PARTY-NOTICES.md",
+          "WGPU-LICENSE-MIT", "WGPU-LICENSE-APACHE", "CPAL-LICENSE")
 REPOSITORY = "https://github.com/retrom-project/siglus_rs"
 BASELINE = "5f358ef1360b0439e92aed2b749e8f25d8721954"
 
@@ -52,7 +53,7 @@ def verify(output):
             metadata["adapterAbi"] != "siglus-host-v1" or metadata["sourceCommits"] != {"engine": BASELINE}):
         raise ValueError("SIGLUS_RELEASE_IDENTITY_INVALID")
     rows = metadata["files"] + [metadata["sourceArchive"]]
-    if len(rows) != 6 or {r["filename"] for r in rows} != expected - {"rpg-runtime-release.json"}:
+    if len(rows) != len(ASSETS) + 1 or {r["filename"] for r in rows} != expected - {"rpg-runtime-release.json"}:
         raise ValueError("SIGLUS_RELEASE_MANIFEST_INVALID")
     for row in rows:
         path = output / row["filename"]
@@ -91,8 +92,7 @@ def main():
     sys.argv = [sys.argv[0], str(output)]
     build_candidate()
     candidate = json.loads((output / "retrom-core-candidate.json").read_text())
-    for name in ("retrom-core-candidate.json", "WGPU-LICENSE-MIT", "WGPU-LICENSE-APACHE", "CPAL-LICENSE"):
-        (output / name).unlink()
+    (output / "retrom-core-candidate.json").unlink()
     source_archive(output / "siglus-source.tar.gz", tag)
     row = lambda name: {"filename": name, "sizeBytes": (output / name).stat().st_size, "sha256": digest(output / name)}
     metadata = {"schemaVersion": 1, "repository": REPOSITORY, "tag": tag, "commit": candidate["commit"],

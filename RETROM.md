@@ -41,7 +41,7 @@ No proprietary font or game input is needed for a build or the synthetic tests.
 
 After a reviewed PR passes the browser workflow, squash it into the maintenance
 branch. Create an annotated `retrom-core-g5f358ef1360b-rN` tag on that branch.
-The tag workflow publishes five runtime/license files, the complete corresponding
+The tag workflow publishes eight runtime/license files, the complete corresponding
 source archive and `rpg-runtime-release.json`. Never move a tag or replace its
 assets. Verify all manifest sizes/hashes before pinning the release in runtime.
 

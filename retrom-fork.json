@@ -20,6 +20,9 @@
     "LICENSE-MPL-2.0",
     "FONT-OFL.txt",
     "THIRD-PARTY-NOTICES.md",
+    "WGPU-LICENSE-MIT",
+    "WGPU-LICENSE-APACHE",
+    "CPAL-LICENSE",
     "siglus-source.tar.gz",
     "rpg-runtime-release.json"
   ]
