@@ -1190,6 +1190,20 @@ type PendingKoeDecode = (
     std::sync::mpsc::Receiver<Result<Vec<u8>, String>>,
 );
 
+/// Browser regression seam: exercise the same voice job used by dialogue.
+/// The caller supplies a generated WAV through the normal filesystem imports.
+#[cfg(all(feature = "compatibility-probe", target_arch = "wasm32"))]
+#[wasm_bindgen::prelude::wasm_bindgen]
+pub fn compatibility_koe_decode_probe() -> bool {
+    let mut audio = AudioHub::new();
+    let mut voice = KoeEngine::new(PathBuf::from("."));
+    voice
+        .play_koe_no(&mut audio, 1, "")
+        .expect("start generated browser voice");
+    voice.tick(&mut audio);
+    voice.current_koe_no() == 1
+}
+
 pub struct KoeEngine {
     inner: SfxEngine,
     current_koe_no: i64,
@@ -1197,8 +1211,8 @@ pub struct KoeEngine {
     /// loaded KOE. It is rebuilt on every play_koe() reinit, not cached by
     /// voice number across append-directory changes.
     mouth_volume_table: Vec<f32>,
-    /// Asynchronous decode in flight: the voice is decoded on a worker thread
-    /// so a 300ms Vorbis decode never freezes the frame loop.
+    /// Native decode runs on a worker thread. Browser reads finish under the
+    /// current JSPI engine entry before the result is consumed by tick().
     pending_decode: Option<PendingKoeDecode>,
     /// Decoded/JITAN-converted voice cache keyed by (koe_no, jitan_rate).
     /// The original re-runs JITAN when the configured rate changes.
@@ -1260,18 +1274,24 @@ impl KoeEngine {
             return Ok(());
         }
 
-        // Decode and perform the original on-memory JITAN conversion on the
-        // worker.  This mirrors elm_sound_player.cpp: decode KOE first, then
-        // construct a mono time-compressed memory sound before playback.
+        // Decode before constructing the original mono JITAN memory sound.
+        // Native builds retain their worker. On Web, spawn_local would poll
+        // from an unwrapped wasm-bindgen callback, outside the engine's JSPI
+        // promise root. Keep file I/O on the serialized engine stack instead;
+        // the filesystem import yields while Content I/O reads each range.
         let project_dir = self.inner.project_dir.clone();
         let append_dir = current_append_dir.to_string();
         let (tx, rx) = std::sync::mpsc::channel();
-        std::thread::spawn(move || {
+        let decode = move || {
             let result = decode_koe_no_for_project(&project_dir, koe_no)
                 .and_then(|wav| crate::audio::jitan::convert_koe_wav(wav, jitan_rate))
                 .map_err(|err| format!("{err:#}"));
             let _ = tx.send(result);
-        });
+        };
+        #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
+        decode();
+        #[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
+        std::thread::spawn(decode);
         self.pending_decode = Some((cache_key, append_dir, rx));
         Ok(())
     }

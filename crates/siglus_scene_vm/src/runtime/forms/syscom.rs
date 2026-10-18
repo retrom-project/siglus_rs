@@ -1063,15 +1063,7 @@ pub(crate) fn capture_for_local_save(
     width: u32,
     height: u32,
 ) -> i64 {
-    use std::time::{SystemTime, UNIX_EPOCH};
-
-    let capture_time = match SystemTime::now().duration_since(UNIX_EPOCH) {
-        Ok(v) => v.as_secs().min(i64::MAX as u64) as i64,
-        Err(err) => {
-            log::error!("GLOBAL.CAPTURE_FOR_LOCAL_SAVE cannot obtain UNIX time: {err}");
-            return 0;
-        }
-    };
+    let capture_time = crate::platform_time::unix_time_secs().min(i64::MAX as u64) as i64;
     let resized = resize_rgba(img, width.max(1), height.max(1));
     let path = original_save::save_dir(&ctx.project_dir).join(format!("{capture_time}.png"));
     if let Err(err) = write_rgba_png_opaque(&path, &resized) {
@@ -2185,7 +2177,7 @@ fn copy_thumb_file(
     let dst_path = thumb_path_for_no_with_config(project_dir, config, dst_no);
     if let Some(src_path) = crate::resource::resolve_game_file(&src_path).ok().flatten() {
         if let Some(parent) = dst_path.parent() {
-            let _ = fs::create_dir_all(parent);
+            let _ = crate::resource::create_dir_all(parent);
         }
         copy_game_file(&src_path, &dst_path);
     } else {
@@ -2222,7 +2214,7 @@ fn swap_thumb_file(
     }
     if let Some(existing) = pb_existing.as_ref() {
         if let Some(parent) = pa.parent() {
-            let _ = fs::create_dir_all(parent);
+            let _ = crate::resource::create_dir_all(parent);
         }
         rename_game_file(existing, &pa);
     } else {
@@ -2230,7 +2222,7 @@ fn swap_thumb_file(
     }
     if a_exists {
         if let Some(parent) = pb.parent() {
-            let _ = fs::create_dir_all(parent);
+            let _ = crate::resource::create_dir_all(parent);
         }
         rename_game_file(&tmp, &pb);
     } else {
@@ -2251,7 +2243,7 @@ fn copy_save_file(
     let dst_path = slot_path_with_counts(project_dir, quick, dst, save_cnt, quick_cnt);
     if let Some(src_path) = crate::resource::resolve_game_file(&src_path).ok().flatten() {
         if let Some(parent) = dst_path.parent() {
-            let _ = fs::create_dir_all(parent);
+            let _ = crate::resource::create_dir_all(parent);
         }
         copy_game_file(&src_path, &dst_path);
     } else {
@@ -2282,7 +2274,7 @@ fn swap_save_file(
     }
     if let Some(existing) = pb_existing.as_ref() {
         if let Some(parent) = pa.parent() {
-            let _ = fs::create_dir_all(parent);
+            let _ = crate::resource::create_dir_all(parent);
         }
         rename_game_file(existing, &pa);
     } else {
@@ -2290,7 +2282,7 @@ fn swap_save_file(
     }
     if a_exists {
         if let Some(parent) = pb.parent() {
-            let _ = fs::create_dir_all(parent);
+            let _ = crate::resource::create_dir_all(parent);
         }
         rename_game_file(&tmp, &pb);
     } else {
@@ -2441,10 +2433,10 @@ fn save_capture_flags_sidecar(ctx: &CommandContext, image_path: &Path, params: &
         }
     }
     if let Some(parent) = image_path.parent() {
-        let _ = fs::create_dir_all(parent);
+        let _ = crate::resource::create_dir_all(parent);
     }
     let sidecar = capture_flags_path(image_path);
-    if fs::write(&sidecar, out).is_ok() {
+    if crate::resource::write_file_bytes(&sidecar, out).is_ok() {
         mark_game_file_written(&sidecar);
     }
 }
@@ -2549,7 +2541,7 @@ fn write_msg_back(ctx: &CommandContext) {
         }
         out.push('\n');
     }
-    if std::fs::write(&path, out).is_ok() {
+    if crate::resource::write_file_bytes(&path, out).is_ok() {
         mark_game_file_written(&path);
     }
 }
@@ -4034,17 +4026,17 @@ fn join_game_path(base: &Path, raw: &str) -> PathBuf {
 }
 
 fn remove_game_file(path: &Path) {
-    let _ = fs::remove_file(path);
+    let _ = crate::resource::remove_file(path);
     crate::resource::invalidate_game_path_cache(path);
 }
 
 fn copy_game_file(src: &Path, dst: &Path) {
-    let _ = fs::copy(src, dst);
+    let _ = crate::resource::copy_file(src, dst);
     crate::resource::invalidate_game_path_cache(dst);
 }
 
 fn rename_game_file(src: &Path, dst: &Path) {
-    let _ = fs::rename(src, dst);
+    let _ = crate::resource::rename_file(src, dst);
     crate::resource::invalidate_game_path_cache(src);
     crate::resource::invalidate_game_path_cache(dst);
 }
@@ -4069,12 +4061,14 @@ fn opaque_rgba(img: &RgbaImage) -> RgbaImage {
 
 fn write_rgba_png(path: &Path, img: &RgbaImage) -> Result<()> {
     if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent)?;
+        crate::resource::create_dir_all(parent)?;
     }
     let Some(buf) = image::RgbaImage::from_raw(img.width, img.height, img.rgba.clone()) else {
         anyhow::bail!("invalid rgba buffer for {}x{} image", img.width, img.height);
     };
-    buf.save(path)?;
+    let mut encoded = std::io::Cursor::new(Vec::new());
+    image::DynamicImage::ImageRgba8(buf).write_to(&mut encoded, image::ImageOutputFormat::Png)?;
+    crate::resource::write_file_bytes(path, encoded.into_inner())?;
     mark_game_file_written(path);
     Ok(())
 }
@@ -4098,7 +4092,7 @@ fn push_i32_le(out: &mut Vec<u8>, value: i32) {
 
 fn write_rgba_bmp_top_down(path: &Path, img: &RgbaImage) -> Result<()> {
     if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent)?;
+        crate::resource::create_dir_all(parent)?;
     }
     let width = img.width;
     let height = img.height;
@@ -4133,7 +4127,7 @@ fn write_rgba_bmp_top_down(path: &Path, img: &RgbaImage) -> Result<()> {
         out.push(px[0]);
         out.push(px[3]);
     }
-    fs::write(path, out)?;
+    crate::resource::write_file_bytes(path, out)?;
     mark_game_file_written(path);
     Ok(())
 }

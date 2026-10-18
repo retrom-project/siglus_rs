@@ -60,6 +60,14 @@ impl Default for AudioHub {
 }
 
 impl AudioHub {
+    pub fn set_host_volume(&mut self, volume: f64) {
+        if let Some(manager) = self.manager.as_mut() {
+            manager
+                .main_track()
+                .set_volume(Volume::Amplitude(volume.clamp(0.0, 1.0)), Tween::default());
+        }
+    }
+
     pub fn new() -> Self {
         // Replays on the virtual clock run silent: waits on a playing sound
         // would otherwise end by the device's real playback time.

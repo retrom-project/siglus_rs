@@ -31,6 +31,8 @@ pub mod original_save;
 pub mod render_math;
 pub(crate) mod render_plan;
 pub mod resource;
+#[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
+pub mod retrom_host;
 pub mod runtime;
 pub mod text_render;
 #[cfg(target_arch = "wasm32")]

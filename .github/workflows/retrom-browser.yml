@@ -1,0 +1,88 @@
+name: Retrom browser
+on:
+  pull_request:
+    branches: [retrom/g5f358ef1360b]
+  push:
+    branches: [retrom/g5f358ef1360b]
+    tags: [retrom-core-g5f358ef1360b-r*]
+permissions:
+  contents: read
+jobs:
+  browser:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    env:
+      RUSTFLAGS: -A static_mut_refs
+      RUST_MIN_STACK: "16777216"
+      CARGO_PROFILE_RELEASE_LTO: "false"
+      CARGO_PROFILE_RELEASE_CODEGEN_UNITS: "16"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.18.0
+      - uses: dtolnay/rust-toolchain@1.91.0
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+      - run: sudo apt-get update && sudo apt-get install -y libasound2-dev libudev-dev
+      - name: Install exact bindgen
+        run: cargo install wasm-bindgen-cli --version 0.2.111 --locked
+      - name: Prepare licensed font and run native regressions
+        run: |
+          python3 -c 'import sys; sys.path.insert(0,"tools"); from build_retrom_candidate import font_inputs; font_inputs()'
+          cargo test --locked -p siglus_scene_vm --lib -j4
+      - name: Build and verify browser distribution
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "$GITHUB_REF_TYPE" = tag ]]; then
+            git branch retrom/g5f358ef1360b origin/retrom/g5f358ef1360b
+            python3 tools/build_retrom_release.py "$RUNNER_TEMP/retrom-release" "$GITHUB_REF_NAME"
+          else
+            python3 tools/build_retrom_release.py "$RUNNER_TEMP/retrom-release" retrom-core-g5f358ef1360b-r1-rc.1 --check
+          fi
+          python3 tools/build_retrom_release.py "$RUNNER_TEMP/retrom-release" --verify
+      - name: Real browser JSPI voice regression
+        run: |
+          cargo build --locked --release --target wasm32-unknown-unknown -p siglus_scene_vm --lib --features compatibility-probe -j4
+          wasm-bindgen target/wasm32-unknown-unknown/release/siglus_scene_vm.wasm --target web --out-dir "$RUNNER_TEMP/voice-pkg"
+          python3 - "$RUNNER_TEMP/voice-pkg/siglus_scene_vm.js" <<'PY'
+          import sys
+          from pathlib import Path
+          sys.path.insert(0, "tools")
+          from retrom_jspi import enable_jspi
+          p = Path(sys.argv[1]); p.write_text(enable_jspi(p.read_text()))
+          PY
+          npm install --prefix "$RUNNER_TEMP/browser-tools" --no-audit --no-fund playwright@1.61.1
+          "$RUNNER_TEMP/browser-tools/node_modules/.bin/playwright" install --with-deps chromium
+          RETROM_PLAYWRIGHT_MODULE="$RUNNER_TEMP/browser-tools/node_modules/playwright/index.mjs" RETROM_CHROME_EXECUTABLE="$(node --input-type=module -e "import {chromium} from '$RUNNER_TEMP/browser-tools/node_modules/playwright/index.mjs'; console.log(chromium.executablePath())")" node tools/run_jspi_voice_probe.mjs "$RUNNER_TEMP/voice-pkg" "$RUNNER_TEMP/voice-result.json"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: retrom-browser
+          path: |
+            ${{ runner.temp }}/retrom-release/*
+            ${{ runner.temp }}/voice-result.json
+  publish:
+    if: github.ref_type == 'tag'
+    needs: browser
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: retrom-browser
+          path: release-input
+      - name: Publish immutable core release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          metadata=$(find release-input -name rpg-runtime-release.json -print -quit)
+          test -n "$metadata"
+          flags=()
+          if [[ "$GITHUB_REF_NAME" = *-rc.* ]]; then flags+=(--prerelease); fi
+          gh release create "$GITHUB_REF_NAME" "$(dirname "$metadata")"/* --repo "$GITHUB_REPOSITORY" --verify-tag --generate-notes "${flags[@]}"

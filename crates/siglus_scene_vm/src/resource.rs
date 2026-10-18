@@ -113,6 +113,55 @@ pub fn read_file_to_string(path: &Path) -> Result<String> {
     Ok(String::from_utf8(bytes)?)
 }
 
+/// Shared writable filesystem seam. Browser hosts persist a private overlay;
+/// native builds retain their ordinary files and save format.
+pub fn write_file_bytes(path: impl AsRef<Path>, bytes: impl AsRef<[u8]>) -> Result<()> {
+    let path = path.as_ref();
+    #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
+    crate::wasm_vfs::WasmDirectoryVfs::new().write_all(&path_to_wasm_vfs(path), bytes.as_ref())?;
+    #[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
+    fs::write(path, bytes)?;
+    invalidate_game_path_cache(path);
+    Ok(())
+}
+
+pub fn create_dir_all(path: impl AsRef<Path>) -> Result<()> {
+    #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
+    crate::wasm_vfs::WasmDirectoryVfs::new().create_dir_all(&path_to_wasm_vfs(path.as_ref()))?;
+    #[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
+    fs::create_dir_all(path)?;
+    Ok(())
+}
+
+pub fn remove_file(path: &Path) -> Result<()> {
+    #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
+    crate::wasm_vfs::WasmDirectoryVfs::new().remove_file(&path_to_wasm_vfs(path))?;
+    #[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
+    fs::remove_file(path)?;
+    invalidate_game_path_cache(path);
+    Ok(())
+}
+
+pub fn copy_file(from: &Path, to: &Path) -> Result<()> {
+    #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
+    write_file_bytes(to, read_file_bytes(from)?)?;
+    #[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
+    fs::copy(from, to)?;
+    invalidate_game_path_cache(to);
+    Ok(())
+}
+
+pub fn rename_file(from: &Path, to: &Path) -> Result<()> {
+    #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
+    crate::wasm_vfs::WasmDirectoryVfs::new()
+        .rename_file(&path_to_wasm_vfs(from), &path_to_wasm_vfs(to))?;
+    #[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
+    fs::rename(from, to)?;
+    invalidate_game_path_cache(from);
+    invalidate_game_path_cache(to);
+    Ok(())
+}
+
 #[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
 pub fn read_file_to_string(path: &Path) -> Result<String> {
     Ok(String::from_utf8(read_file_bytes(path)?)?)

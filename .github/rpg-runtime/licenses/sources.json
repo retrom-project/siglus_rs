@@ -1,0 +1,132 @@
+[
+  {
+    "filename": "THEORA-COPYING",
+    "url": "https://raw.githubusercontent.com/xiph/theora/v1.2.0/COPYING",
+    "sha256": "8417fad7da775735564e209484a2e011e0fa201e94f01fdbee6e4977e478e6fc"
+  },
+  {
+    "filename": "THEORA-PATENTS",
+    "url": "https://raw.githubusercontent.com/xiph/theora/v1.2.0/LICENSE",
+    "sha256": "2c902950c73a63cd285dc0c36573de9c5fefe66d49312949c51d941f33e92932"
+  },
+  {
+    "filename": "LGPL-2.1",
+    "url": "https://raw.githubusercontent.com/FFmpeg/FFmpeg/n8.0/COPYING.LGPLv2.1",
+    "sha256": "246041b6ecf9bc32d718a62c57877c78b5eb397b6467e74ed7ae2626ab189c30"
+  },
+  {
+    "filename": "GPL-2.0",
+    "url": "https://raw.githubusercontent.com/FFmpeg/FFmpeg/n8.0/COPYING.GPLv2",
+    "sha256": "8177f97513213526df2cf6184d8ff986c675afb514d4e68a404010521b880643"
+  },
+  {
+    "filename": "codespan-reporting-LICENSE",
+    "url": "https://raw.githubusercontent.com/brendanzab/codespan/fd389a13f5bb6d625b71e2e4694b26e127f393f9/LICENSE",
+    "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4"
+  },
+  {
+    "filename": "dasp_sample-LICENSE-APACHE",
+    "url": "https://raw.githubusercontent.com/rustaudio/sample/97c3bb9b2363c0b46ac1633858bf1054fd02a980/LICENSE-APACHE",
+    "sha256": "756c8d2ab2dc24f256e1455b5f03937f4933d83d7bc9f2d55009fc962377d512"
+  },
+  {
+    "filename": "dasp_sample-LICENSE-MIT",
+    "url": "https://raw.githubusercontent.com/rustaudio/sample/97c3bb9b2363c0b46ac1633858bf1054fd02a980/LICENSE-MIT",
+    "sha256": "b1d6df41ed3aa96806e74c729444d7c121d90e6660a6aed01d298e03fde475a0"
+  },
+  {
+    "filename": "ecolor-LICENSE-APACHE",
+    "url": "https://raw.githubusercontent.com/emilk/egui/abab06867cdbc8966cf1de1e5429a7b7f9126af2/LICENSE-APACHE",
+    "sha256": "8173d5c29b4f956d532781d2b86e4e30f83e6b7878dce18c919451d6ba707c90"
+  },
+  {
+    "filename": "ecolor-LICENSE-MIT",
+    "url": "https://raw.githubusercontent.com/emilk/egui/abab06867cdbc8966cf1de1e5429a7b7f9126af2/LICENSE-MIT",
+    "sha256": "95ca92f5f8ea5231f1580b3a2a799e8260af3114b900e1def5355a7f44bcf60c"
+  },
+  {
+    "filename": "egui-LICENSE-APACHE",
+    "url": "https://raw.githubusercontent.com/emilk/egui/abab06867cdbc8966cf1de1e5429a7b7f9126af2/LICENSE-APACHE",
+    "sha256": "8173d5c29b4f956d532781d2b86e4e30f83e6b7878dce18c919451d6ba707c90"
+  },
+  {
+    "filename": "egui-LICENSE-MIT",
+    "url": "https://raw.githubusercontent.com/emilk/egui/abab06867cdbc8966cf1de1e5429a7b7f9126af2/LICENSE-MIT",
+    "sha256": "95ca92f5f8ea5231f1580b3a2a799e8260af3114b900e1def5355a7f44bcf60c"
+  },
+  {
+    "filename": "egui-wgpu-LICENSE-APACHE",
+    "url": "https://raw.githubusercontent.com/emilk/egui/abab06867cdbc8966cf1de1e5429a7b7f9126af2/LICENSE-APACHE",
+    "sha256": "8173d5c29b4f956d532781d2b86e4e30f83e6b7878dce18c919451d6ba707c90"
+  },
+  {
+    "filename": "egui-wgpu-LICENSE-MIT",
+    "url": "https://raw.githubusercontent.com/emilk/egui/abab06867cdbc8966cf1de1e5429a7b7f9126af2/LICENSE-MIT",
+    "sha256": "95ca92f5f8ea5231f1580b3a2a799e8260af3114b900e1def5355a7f44bcf60c"
+  },
+  {
+    "filename": "emath-LICENSE-APACHE",
+    "url": "https://raw.githubusercontent.com/emilk/egui/abab06867cdbc8966cf1de1e5429a7b7f9126af2/LICENSE-APACHE",
+    "sha256": "8173d5c29b4f956d532781d2b86e4e30f83e6b7878dce18c919451d6ba707c90"
+  },
+  {
+    "filename": "emath-LICENSE-MIT",
+    "url": "https://raw.githubusercontent.com/emilk/egui/abab06867cdbc8966cf1de1e5429a7b7f9126af2/LICENSE-MIT",
+    "sha256": "95ca92f5f8ea5231f1580b3a2a799e8260af3114b900e1def5355a7f44bcf60c"
+  },
+  {
+    "filename": "epaint-LICENSE-APACHE",
+    "url": "https://raw.githubusercontent.com/emilk/egui/abab06867cdbc8966cf1de1e5429a7b7f9126af2/LICENSE-APACHE",
+    "sha256": "8173d5c29b4f956d532781d2b86e4e30f83e6b7878dce18c919451d6ba707c90"
+  },
+  {
+    "filename": "epaint-LICENSE-MIT",
+    "url": "https://raw.githubusercontent.com/emilk/egui/abab06867cdbc8966cf1de1e5429a7b7f9126af2/LICENSE-MIT",
+    "sha256": "95ca92f5f8ea5231f1580b3a2a799e8260af3114b900e1def5355a7f44bcf60c"
+  },
+  {
+    "filename": "kira-LICENSE-APACHE",
+    "url": "https://raw.githubusercontent.com/tesselode/kira/dfb08d08d065930e9b257203bf11c6d34742f542/LICENSE-APACHE",
+    "sha256": "85bb5389360900e5ef360073a906f7ff6c2866995743242671091f376fe2c92d"
+  },
+  {
+    "filename": "kira-LICENSE-MIT",
+    "url": "https://raw.githubusercontent.com/tesselode/kira/dfb08d08d065930e9b257203bf11c6d34742f542/LICENSE-MIT",
+    "sha256": "1d075e895672c131d6adda4c0d03933e4162ca732d8c99b0cc497af884b8e703"
+  },
+  {
+    "filename": "naga-LICENSE.MIT",
+    "url": "https://raw.githubusercontent.com/gfx-rs/wgpu/4521502da69bcf4f92c8350042c268573ef216d4/LICENSE.MIT",
+    "sha256": "c7fea58d1cfe49634cd92e54fc10a9d871f4b275321a4cd8c09e449122caaeb4"
+  },
+  {
+    "filename": "profiling-LICENSE-APACHE",
+    "url": "https://raw.githubusercontent.com/aclysma/profiling/740d74c82212f1f0584cfa5c6d884c5ab5367101/LICENSE-APACHE",
+    "sha256": "10d30a673cd5e9349bdc02aeb48f14b3386d27d0da32df8f0a555d4aa16aa551"
+  },
+  {
+    "filename": "profiling-LICENSE-MIT",
+    "url": "https://raw.githubusercontent.com/aclysma/profiling/740d74c82212f1f0584cfa5c6d884c5ab5367101/LICENSE-MIT",
+    "sha256": "c8167fdeeed46d3f244d3f85c5bf998ce889343691c32be2c61a8bc4b5c08333"
+  },
+  {
+    "filename": "spirv-LICENSE",
+    "url": "https://raw.githubusercontent.com/gfx-rs/rspirv/e91a5debc10c395b36db7721dfff6326d697a1e2/LICENSE",
+    "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+  },
+  {
+    "filename": "winit-web-LICENSE",
+    "url": "https://raw.githubusercontent.com/rust-windowing/winit/7d20408d33210c93bf036335b88ee083ca563a90/LICENSE",
+    "sha256": "6dc0e068dcf3a5bc8e054205b85b7720e1d49265bbc64bf515d2cf79197df69a"
+  },
+  {
+    "filename": "hexf-parse-CC0",
+    "url": "https://raw.githubusercontent.com/spdx/license-list-data/v3.27.0/text/CC0-1.0.txt",
+    "sha256": "a2010f343487d3f7618affe54f789f5487602331c0a8d03f49e9a7c547cf0499"
+  },
+  {
+    "filename": "FFMPEG-COPYRIGHTS",
+    "url": "https://github.com/FFmpeg/FFmpeg/tree/n8.0/libavcodec",
+    "sha256": "5510a09d2cf1e2f09d5c2f0de2f68f9aa7493a0f75084a1acdf9197581933e5e"
+  }
+]

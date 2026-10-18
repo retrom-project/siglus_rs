@@ -26,3 +26,9 @@ docs/
 siglus_unknown_report.txt
 dist/
 GameData/
+
+# Retrom browser build dependencies and temporary wasm-bindgen output
+**/node_modules/
+platform/retrom/pkg/
+__pycache__/
+*.py[cod]

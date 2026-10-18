@@ -7,7 +7,10 @@
 pub use std::time::Duration;
 
 #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
-pub use web_time::Instant;
+pub use virtual_clock::Instant;
+
+#[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
+pub use browser_clock::set_browser_paused;
 
 #[cfg(all(
     not(all(target_arch = "wasm32", target_os = "unknown")),
@@ -21,7 +24,10 @@ pub use virtual_clock::{Instant, advance_virtual_clock};
 /// A monotonic clock that only moves when told to, with the parts of
 /// `std::time::Instant`'s API the engine uses: VM replays then run the same
 /// on every machine and at any speed.
-#[cfg(feature = "virtual-clock")]
+#[cfg(any(
+    feature = "virtual-clock",
+    all(target_arch = "wasm32", target_os = "unknown")
+))]
 mod virtual_clock {
     use std::ops::{Add, AddAssign, Sub, SubAssign};
     use std::sync::atomic::{AtomicU64, Ordering};
@@ -40,7 +46,14 @@ mod virtual_clock {
 
     impl Instant {
         pub fn now() -> Self {
-            Self(NOW_NS.load(Ordering::SeqCst))
+            #[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
+            {
+                Self(NOW_NS.load(Ordering::SeqCst))
+            }
+            #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
+            {
+                Self(super::browser_clock::now_ns())
+            }
         }
 
         pub fn elapsed(&self) -> Duration {
@@ -180,4 +193,41 @@ pub fn local_log_timestamp() -> String {
         minute = t.minute,
         second = t.second,
     )
+}
+
+#[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
+mod browser_clock {
+    use std::cell::RefCell;
+    use std::time::Duration;
+    struct Clock {
+        origin: web_time::Instant,
+        paused: Option<web_time::Instant>,
+        offset: Duration,
+    }
+    thread_local! {
+        static CLOCK: RefCell<Clock> = RefCell::new(Clock {origin: web_time::Instant::now(), paused: None, offset: Duration::ZERO});
+    }
+    pub fn now_ns() -> u64 {
+        CLOCK.with(|clock| {
+            let clock = clock.borrow();
+            let now = clock.paused.unwrap_or_else(web_time::Instant::now);
+            86_400_000_000_000
+                + now
+                    .duration_since(clock.origin)
+                    .saturating_sub(clock.offset)
+                    .as_nanos() as u64
+        })
+    }
+    pub fn set_browser_paused(paused: bool) {
+        CLOCK.with(|clock| {
+            let mut clock = clock.borrow_mut();
+            if paused {
+                if clock.paused.is_none() {
+                    clock.paused = Some(web_time::Instant::now());
+                }
+            } else if let Some(start) = clock.paused.take() {
+                clock.offset += start.elapsed();
+            }
+        });
+    }
 }

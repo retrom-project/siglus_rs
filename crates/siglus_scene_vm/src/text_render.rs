@@ -7,7 +7,7 @@
 
 use crate::assets::RgbaImage;
 use crate::image_manager::{ImageHandle, ImageManager};
-use ab_glyph::{Font, FontArc, FontRef, PxScale, ScaleFont, point};
+use ab_glyph::{Font, FontArc, FontRef, PxScale, ScaleFont, VariableFont, point};
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, OnceLock};
@@ -15,7 +15,7 @@ use std::sync::{Mutex, OnceLock};
 static MISSING_CONFIGURED_FONTS_LOGGED: OnceLock<Mutex<HashSet<String>>> = OnceLock::new();
 
 // Share one embedded font allocation between game text and desktop dialogs.
-pub(crate) static DEFAULT_FONT_BYTES: &[u8] = include_bytes!("../assets/fonts/default.ttf");
+pub(crate) static DEFAULT_FONT_BYTES: &[u8] = include_bytes!(env!("SIGLUS_DEFAULT_FONT_PATH"));
 
 fn log_missing_configured_font_once(requested_name: &str, fallback: Option<&Path>) {
     let key = normalize_font_name_for_match(requested_name.trim_start_matches('@'));
@@ -388,7 +388,10 @@ impl FontCache {
         // Parsed in place: the font lives in the executable, so it costs no
         // heap (a copy was 7.5 MiB, repeated on every font switch).
         match FontRef::try_from_slice(bytes) {
-            Ok(font) => {
+            Ok(mut font) => {
+                // Variable fallback fonts can default to their thinnest face.
+                // Use regular weight; static fonts ignore the absent axis.
+                let _ = font.set_variation(b"wght", 400.0);
                 self.font = Some(FontArc::from(font));
                 let source =
                     embedded_font::EMBEDDED_DEFAULT_FONT_SOURCE.unwrap_or("embedded:default-font");

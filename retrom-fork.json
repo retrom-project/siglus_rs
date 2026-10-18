@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "forkRepository": "https://github.com/retrom-project/siglus_rs",
+  "defaultBranch": "retrom/g5f358ef1360b",
+  "upstreamMirrorBranch": "main",
+  "upstreams": [
+    {
+      "role": "engine",
+      "repository": "https://github.com/xmoezzz/siglus_rs",
+      "refType": "COMMIT",
+      "ref": "5f358ef1360b0439e92aed2b749e8f25d8721954",
+      "commit": "5f358ef1360b0439e92aed2b749e8f25d8721954"
+    }
+  ],
+  "releaseTagPattern": "^retrom-core-g5f358ef1360b-r[1-9][0-9]*(-rc\\.[1-9][0-9]*)?$",
+  "adapterAbi": "siglus-host-v1",
+  "releaseAssets": [
+    "siglus.mjs",
+    "siglus_bg.wasm",
+    "LICENSE-MPL-2.0",
+    "FONT-OFL.txt",
+    "THIRD-PARTY-NOTICES.md",
+    "siglus-source.tar.gz",
+    "rpg-runtime-release.json"
+  ]
+}

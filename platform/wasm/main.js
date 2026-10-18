@@ -1,3 +1,4 @@
+import {SiglusSaveStore, saveScope} from "./siglus_save_store.js";
 import init, {
   start_siglus_from_directory,
   launcherScan,
@@ -276,6 +277,15 @@ globalThis.siglusReadFile = function siglusReadFile(path) {
   const file = files.get(p);
   if (!file) throw new Error(`file not found: ${path}`);
   return readFileSync(file);
+};
+
+globalThis.siglusFileSize = path => {
+  const p = resolvePath(path);
+  return overlay.has(p) ? overlay.get(p).length : files.get(p).size;
+};
+globalThis.siglusReadFileRange = (path, offset, length) => {
+  const p = resolvePath(path);
+  return overlay.has(p) ? overlay.get(p).slice(offset, offset + length) : readFileSync(files.get(p).slice(offset, offset + length));
 };
 
 globalThis.siglusListDir = function siglusListDir(path) {
@@ -661,6 +671,22 @@ async function launchGame(game) {
   }
 }
 
+let siglusSaves = null;
+let pendingSiglusArchive = null;
+globalThis.siglusSaves = {
+  flush: async () => { if (siglusSaves) await siglusSaves.flush(); },
+  export: async () => {
+    if (!siglusSaves) throw new Error("Launch a Siglus game before exporting saves");
+    return siglusSaves.export();
+  },
+  import: async snapshot => {
+    if (running) throw new Error("Import saves before launching the engine");
+    pendingSiglusArchive = snapshot;
+  },
+};
+const siglusBase = {exists: globalThis.siglusFileExists, read: globalThis.siglusReadFile, list: globalThis.siglusListDir,
+  size: globalThis.siglusFileSize, readRange: globalThis.siglusReadFileRange};
+
 async function launchSiglus(game) {
   // The Siglus host reads paths relative to the game root.
   viewPrefix = game.root;
@@ -674,6 +700,13 @@ async function launchSiglus(game) {
   if (!globalThis.siglusFileExists("Scene.pck")) {
     throw new Error("Scene.pck was not found in the selected SiglusEngine game");
   }
+  const scope = await saveScope(JSON.stringify({root: game.root, engine: "siglus", language: game.nls || "default"}));
+  siglusSaves = await SiglusSaveStore.open(scope, siglusBase, setError);
+  if (pendingSiglusArchive) {
+    await siglusSaves.import(pendingSiglusArchive);
+    pendingSiglusArchive = null;
+  }
+  siglusSaves.bind();
   running = { kind: "siglus" };
   menuButton.style.display = "none";
   skipButton.style.display = "none";
@@ -866,7 +899,9 @@ function launchFramebuffer(game) {
   });
 }
 
-function exitPlayer() {
+async function exitPlayer() {
+  try { if (siglusSaves) await siglusSaves.flush(); }
+  catch (error) { setError(error); return; }
   if (running && running.kind === "siglus") {
     // The Siglus host owns the event loop; a reload is the clean way out.
     window.location.reload();
