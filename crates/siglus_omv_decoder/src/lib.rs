@@ -134,6 +134,14 @@ impl<R: Read + Seek> TheoraVideoStream<R> {
         self.info
     }
 
+    /// Presentation packet cursor, including duplicate/empty Theora packets
+    /// that advance the timeline without producing new pixels.
+    pub fn next_video_packet_index(&self) -> usize {
+        self.packet_no
+            .saturating_sub(self.header_packet_count)
+            .max(0) as usize
+    }
+
     pub fn read_video_frame(&mut self) -> Result<Option<Vec<u8>>> {
         self.read_video_frame_with(|ycbcr| pack_theorafile_frame(ycbcr))?
             .transpose()

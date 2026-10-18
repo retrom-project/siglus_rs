@@ -271,6 +271,8 @@ impl WasmApp {
                 host.mouse_wheel(dy);
             }
             WindowEvent::RedrawRequested => {
+                #[cfg(feature = "compatibility-probe")]
+                publish_compatibility_probe(host);
                 if let Some(window) = self.window {
                     apply_ime_window_state(window, host);
                 }
@@ -357,6 +359,81 @@ fn lookup_canvas(id: &str) -> Result<web_sys::HtmlCanvasElement, String> {
 
 fn log_js_error(msg: &str) {
     web_sys::console::error_1(&JsValue::from_str(msg));
+}
+
+#[cfg(feature = "compatibility-probe")]
+fn publish_compatibility_probe(host: &mut SiglusHost) {
+    let vm = host.vm_mut();
+    let status = format!(
+        "scene={:?} line={} halted={}",
+        vm.current_scene_name(),
+        vm.current_line_no(),
+        vm.is_halted()
+    );
+    let ctx = &vm.ctx;
+    let texts = ctx
+        .globals
+        .stage_forms
+        .values()
+        .flat_map(|form| form.mwnd_lists.values())
+        .flatten()
+        .filter(|window| window.open && !window.msg_text.is_empty())
+        .map(|window| window.msg_text.chars().take(500).collect::<String>())
+        .take(6)
+        .collect::<Vec<_>>()
+        .join("\n");
+    let value = js_sys::Object::new();
+    let movies = ctx.movie.debug_memory_stats();
+    for (name, number) in [
+        ("movieVideoBytes", movies.video_bytes),
+        ("movieVideoFrames", movies.video_frames),
+        ("movieStreams", movies.active_streams),
+        ("movieAudioBytes", movies.audio_pcm_bytes),
+        ("movieQueuedVideoBytes", movies.queued_video_bytes),
+        ("movieQueuedVideoFrames", movies.queued_video_frames),
+    ] {
+        let _ = js_sys::Reflect::set(
+            &value,
+            &JsValue::from_str(name),
+            &JsValue::from_f64(number as f64),
+        );
+    }
+    for (name, text) in [
+        ("status", status),
+        ("texts", texts),
+        (
+            "savePoint",
+            ctx.local_save_snapshot
+                .as_ref()
+                .and_then(|snapshot| {
+                    let mut reader =
+                        crate::original_save::OriginalStreamReader::new(&snapshot.local_stream);
+                    let scene = reader.string().ok()?;
+                    let line = reader.i32().ok()?;
+                    Some(format!(
+                        "scene={:?} line={} halted=false",
+                        Some(scene),
+                        line
+                    ))
+                })
+                .unwrap_or_default(),
+        ),
+        ("unknown", ctx.unknown.summary_string(12)),
+        (
+            "mouse",
+            format!(
+                "{},{} down={:?}",
+                ctx.input.mouse_x, ctx.input.mouse_y, ctx.input.last_mouse_down
+            ),
+        ),
+    ] {
+        let _ = js_sys::Reflect::set(&value, &JsValue::from_str(name), &JsValue::from_str(&text));
+    }
+    let _ = js_sys::Reflect::set(
+        &js_sys::global(),
+        &JsValue::from_str("__siglusCompatProbe"),
+        &value,
+    );
 }
 
 fn apply_ime_window_state(window: &dyn Window, host: &mut SiglusHost) {

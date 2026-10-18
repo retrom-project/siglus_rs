@@ -440,6 +440,18 @@ fn present_mode_for_wait_display_vsync(
 }
 
 impl Renderer {
+    #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
+    pub async fn new_canvas(canvas: web_sys::HtmlCanvasElement) -> Result<Self> {
+        let width = canvas.width().max(1);
+        let height = canvas.height().max(1);
+        let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
+            backends: wgpu::Backends::GL,
+            ..Default::default()
+        });
+        let surface = instance.create_surface(wgpu::SurfaceTarget::Canvas(canvas))?;
+        Self::new_from_instance_surface(instance, surface, width, height, 1.0).await
+    }
+
     /// Human-readable presentation adapter used by the VM's compatibility
     /// variable. Platform renderers expose the same method without exposing
     /// their native graphics object to the host.

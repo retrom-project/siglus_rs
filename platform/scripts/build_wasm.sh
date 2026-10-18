@@ -53,12 +53,13 @@ wasm-bindgen "$WASM_PATH" \
 
 cp -f "$PLATFORM_DIR/wasm/index.html" "$DIST/index.html"
 cp -f "$PLATFORM_DIR/wasm/main.js" "$DIST/main.js"
+cp -f "$PLATFORM_DIR/wasm/siglus_save_store.js" "$DIST/siglus_save_store.js"
 cp -f "$PLATFORM_DIR/wasm/style.css" "$DIST/style.css"
 
 (
   cd "$DIST"
   rm -f siglus_rs-wasm.zip
-  zip -r siglus_rs-wasm.zip index.html main.js style.css pkg
+  zip -r siglus_rs-wasm.zip index.html main.js siglus_save_store.js style.css pkg
 )
 
 echo "OK: $DIST/siglus_rs-wasm.zip"

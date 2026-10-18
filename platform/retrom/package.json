@@ -1,0 +1,1 @@
+{"name":"retrom-siglus-build","private":true,"type":"module","scripts":{"test":"node --experimental-vm-modules --test *.test.mjs"},"devDependencies":{"esbuild":"0.27.0"}}

@@ -4614,7 +4614,7 @@ impl CommandContext {
     }
 
     pub fn tick_frame(&mut self) {
-        #[cfg(target_os = "vita")]
+        #[cfg(any(target_os = "vita", all(target_arch = "wasm32", target_os = "unknown")))]
         self.movie.evict_idle_streams();
         let now = crate::platform_time::Instant::now();
         let last = self.frame_clock_last.replace(now);
@@ -12353,6 +12353,10 @@ fn sync_movie_object_recursive(
                     return;
                 }
             };
+            #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
+            if let Some(ms) = polled.clamped_timer_ms {
+                obj.movie.timer_ms = ms;
+            }
             if obj.movie.total_ms.is_none() || polled.total_ms.is_some() {
                 obj.movie.total_ms = polled.total_ms.or(obj.movie.total_ms);
             }

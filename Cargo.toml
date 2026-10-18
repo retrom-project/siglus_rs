@@ -3,7 +3,7 @@ resolver = "3"
 members = [
   "crates/*",
 ]
-exclude = ["vendor/eluna_rs"]
+exclude = ["vendor/eluna_rs", "vendor/wgpu-hal-0.21.1", "vendor/cpal-0.15.3"]
 
 [workspace.package]
 edition = "2024"
@@ -41,3 +41,8 @@ log = "0.4"
 env_logger = "0.11"
 kira = "0.9"
 chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
+
+[patch.crates-io]
+wgpu-hal = { path = "vendor/wgpu-hal-0.21.1" }
+
+cpal = { path = "vendor/cpal-0.15.3" }

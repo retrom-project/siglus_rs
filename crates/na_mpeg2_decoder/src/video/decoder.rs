@@ -181,6 +181,19 @@ impl Decoder {
     }
 
     pub fn decode_shared(&mut self, data: &[u8], pts_90k: Option<i64>) -> Result<Vec<Arc<Frame>>> {
+        self.decode_shared_limited(data, pts_90k, usize::MAX)
+    }
+
+    /// Decode at most `limit` presentation pictures, leaving compressed units
+    /// in this decoder for the next call with empty input. Reference pictures
+    /// remain in YUV. This lets single-threaded hosts yield between pictures
+    /// even when one PES packet contains a large number of tiny frames.
+    pub fn decode_shared_limited(
+        &mut self,
+        data: &[u8],
+        pts_90k: Option<i64>,
+        limit: usize,
+    ) -> Result<Vec<Arc<Frame>>> {
         if pts_90k.is_some()
             && let Some(cur) = self.cur.as_mut()
             && cur.pts_90k.is_none()
@@ -192,6 +205,9 @@ impl Decoder {
         let mut out: Vec<Arc<Frame>> = Vec::new();
 
         loop {
+            if out.len() >= limit {
+                break;
+            }
             let Some((unit_start, code)) = find_next_start_code(&self.es_buf, 0) else {
                 if self.es_buf.len() > 3 {
                     let keep = self.es_buf.split_off(self.es_buf.len() - 3);

@@ -15802,7 +15802,7 @@ mod call_frame_save_metadata_tests {
     use crate::scene_stream::SceneStream;
     use std::path::PathBuf;
 
-    fn empty_scene_chunk() -> Vec<u8> {
+    fn test_scene_chunk() -> Vec<u8> {
         const HEADER_WORDS: usize = 33;
         const HEADER_SIZE: i32 = (HEADER_WORDS * 4) as i32;
         let mut words = [0i32; HEADER_WORDS];
@@ -15811,10 +15811,14 @@ mod call_frame_save_metadata_tests {
         ] {
             words[idx] = HEADER_SIZE;
         }
-        let mut out = Vec::with_capacity(HEADER_SIZE as usize);
+        // Return-continuation tests jump to byte 12 / 16. An empty program
+        // rejects those addresses before the continuation assertions run.
+        words[2] = 32;
+        let mut out = Vec::with_capacity(HEADER_SIZE as usize + 32);
         for word in words {
             out.extend_from_slice(&word.to_le_bytes());
         }
+        out.resize(HEADER_SIZE as usize + 32, 0);
         out
     }
 
@@ -15843,7 +15847,7 @@ mod call_frame_save_metadata_tests {
 
     #[test]
     fn exec_return_prefers_per_callee_continuation_for_inline_calls() {
-        let chunk = Box::leak(empty_scene_chunk().into_boxed_slice());
+        let chunk = Box::leak(test_scene_chunk().into_boxed_slice());
         let stream = SceneStream::new(chunk).expect("empty scene stream");
         let mut vm = SceneVm::new(stream, CommandContext::new(PathBuf::from(".")));
         vm.call_stack.clear();
@@ -15864,7 +15868,7 @@ mod call_frame_save_metadata_tests {
 
     #[test]
     fn exec_return_falls_back_to_original_caller_metadata_for_saved_frames() {
-        let chunk = Box::leak(empty_scene_chunk().into_boxed_slice());
+        let chunk = Box::leak(test_scene_chunk().into_boxed_slice());
         let stream = SceneStream::new(chunk).expect("empty scene stream");
         let mut vm = SceneVm::new(stream, CommandContext::new(PathBuf::from(".")));
         vm.call_stack.clear();
@@ -15881,7 +15885,7 @@ mod call_frame_save_metadata_tests {
 
     #[test]
     fn call_frame_round_trip_keeps_caller_lexer_metadata() {
-        let chunk = Box::leak(empty_scene_chunk().into_boxed_slice());
+        let chunk = Box::leak(test_scene_chunk().into_boxed_slice());
         let stream = SceneStream::new(chunk).expect("empty scene stream");
         let vm = SceneVm::new(stream, CommandContext::new(PathBuf::from(".")));
         let frame = CallFrame {

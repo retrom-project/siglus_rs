@@ -395,6 +395,9 @@ impl SiglusHost {
     pub fn step(&mut self, dt_ms: u32) -> Result<bool> {
         let _ = dt_ms;
         self.last_step = Some(Instant::now());
+        if self.exit_requested() {
+            return Ok(true);
+        }
         if self.native_messagebox_pending() {
             return Ok(false);
         }
@@ -406,7 +409,16 @@ impl SiglusHost {
             crate::render::vita_stats::phase(crate::render::vita_stats::PUMP, start);
         }
         self.redraw()?;
-        Ok(self.pending_exit || (self.vm.is_halted() && self.flow.stack.is_empty()))
+        Ok(self.exit_requested())
+    }
+
+    fn exit_requested(&self) -> bool {
+        host_exit_requested(
+            self.pending_exit,
+            self.vm.ctx.globals.system.active_flag,
+            self.vm.is_halted(),
+            self.flow.stack.is_empty(),
+        )
     }
 
     pub fn mouse_move(&mut self, x: f64, y: f64) {
@@ -1822,4 +1834,28 @@ pub fn parse_bool_exit(result: Result<bool>, context: &str) -> i32 {
 
 pub fn default_frame_interval_ms(dt_ms: u32) -> u32 {
     if dt_ms == 0 { FRAME_INTERVAL_MS } else { dt_ms }
+}
+
+fn host_exit_requested(pending: bool, active: bool, halted: bool, flow_empty: bool) -> bool {
+    // SYSCOM.END_GAME deactivates the engine without halting a suspended script.
+    pending || !active || (halted && flow_empty)
+}
+
+#[cfg(test)]
+mod exit_tests {
+    use super::host_exit_requested;
+
+    #[test]
+    fn native_game_end_exits_even_with_a_suspended_script_flow() {
+        assert!(host_exit_requested(false, false, false, false));
+    }
+
+    #[test]
+    fn running_or_suspended_scripts_do_not_exit_early() {
+        assert!(!host_exit_requested(false, true, false, false));
+        assert!(!host_exit_requested(false, true, true, false));
+        assert!(!host_exit_requested(false, true, false, true));
+        assert!(host_exit_requested(false, true, true, true));
+        assert!(host_exit_requested(true, true, false, false));
+    }
 }
