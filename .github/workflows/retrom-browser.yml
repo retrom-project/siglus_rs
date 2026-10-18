@@ -33,6 +33,8 @@ jobs:
       - name: Prepare licensed font and run native regressions
         run: |
           python3 -c 'import sys; sys.path.insert(0,"tools"); from build_retrom_candidate import font_inputs; font_inputs()'
+          printf 'pcm.!default { type null }\n' > "$RUNNER_TEMP/alsa-null.conf"
+          export ALSA_CONFIG_PATH="$RUNNER_TEMP/alsa-null.conf"
           cargo test --locked -p siglus_scene_vm --lib -j4
       - name: Build and verify browser distribution
         shell: bash
