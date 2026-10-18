@@ -3069,8 +3069,7 @@ impl App {
                 ProcType::EndGame => {
                     self.flow.pop();
                     if let Some(vm) = self.vm.as_mut() {
-                        syscom::write_global_save(&vm.ctx);
-                        vm.ctx.globals.system.active_flag = false;
+                        vm.finish_game()?;
                     }
                     self.pending_exit = true;
                     continue;

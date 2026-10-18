@@ -8389,19 +8389,38 @@ impl<'a> SceneVm<'a> {
     }
 
     fn configured_runtime_save_count(&self, quick: bool) -> usize {
-        let keys: [&str; 2] = if quick {
-            ["#QUICK_SAVE.CNT", "QUICK_SAVE.CNT"]
+        let layout =
+            crate::original_save::SaveSlotLayout::from_config(self.ctx.tables.gameexe.as_ref());
+        if quick {
+            layout.quick_count
         } else {
-            ["#SAVE.CNT", "SAVE.CNT"]
-        };
-        let default_count = if quick { 3 } else { 10 };
-        self.ctx
-            .tables
-            .gameexe
-            .as_ref()
-            .and_then(|cfg| keys.iter().find_map(|key| cfg.get_usize(key)))
-            .unwrap_or(default_count)
-            .min(10000)
+            layout.normal_count
+        }
+    }
+
+    /// Complete an accepted native exit after its confirmation and presentation.
+    pub fn finish_game(&mut self) -> Result<()> {
+        if !self.ctx.globals.system.active_flag {
+            return Ok(());
+        }
+        if self.ctx.local_save_snapshot.is_some()
+            && self
+                .runtime_save_file_path(RuntimeSaveKind::End, 0)
+                .is_some()
+        {
+            crate::runtime::forms::syscom::prepare_runtime_save_thumb_capture_with_priority(
+                &mut self.ctx,
+                crate::runtime::forms::syscom::CAPTURE_PRIOR_END,
+            );
+            self.perform_runtime_save_request(RuntimeSaveRequest {
+                kind: RuntimeSaveKind::End,
+                index: 0,
+            })?;
+        } else {
+            crate::runtime::forms::syscom::write_global_save(&self.ctx);
+        }
+        self.ctx.globals.system.active_flag = false;
+        Ok(())
     }
 
     fn runtime_save_file_path(
@@ -8409,16 +8428,12 @@ impl<'a> SceneVm<'a> {
         kind: RuntimeSaveKind,
         index: usize,
     ) -> Option<std::path::PathBuf> {
-        let save_kind = Self::save_kind_to_original(kind)?;
-        let save_cnt = self.configured_runtime_save_count(false);
-        let quick_cnt = self.configured_runtime_save_count(true);
-        Some(crate::original_save::save_file_path_with_counts(
-            &self.ctx.project_dir,
-            save_cnt,
-            quick_cnt,
-            save_kind,
-            index,
-        ))
+        let kind = Self::save_kind_to_original(kind)?;
+        let layout =
+            crate::original_save::SaveSlotLayout::from_config(self.ctx.tables.gameexe.as_ref());
+        layout
+            .file_no(kind, index)
+            .map(|no| crate::original_save::save_file_path_for_no(&self.ctx.project_dir, no))
     }
 
     fn stamp_slot_with_local_time(slot: &mut crate::runtime::globals::SaveSlotState) {
@@ -8435,18 +8450,15 @@ impl<'a> SceneVm<'a> {
         slot.millisecond = now.millisecond as i64;
     }
 
-    /// Build the slot record that ends up in the save file header and in the in-memory
-    /// `save_slots` / `quick_save_slots` tables. Mirrors C++ `tnm_save_local_on_file`:
+    /// Build the native save header from the SAVEPOINT, without populating the
+    /// file cache before a successful write. Mirrors C++ `tnm_save_local_on_file`:
     /// timestamps come from `GetLocalTime` (i.e. "now"), while the textual fields
     /// (title / message / full_message / append_dir / append_name) come from the
     /// engine's m_local_save snapshot.
     ///
     /// Inner-save still pulls textual fields from live runtime state because the
     /// inner-save path here is the only consumer that doesn't go through SAVEPOINT.
-    fn ensure_runtime_slot_for_save(
-        &mut self,
-        req: RuntimeSaveRequest,
-    ) -> crate::runtime::globals::SaveSlotState {
+    fn runtime_slot_for_save(&self) -> crate::runtime::globals::SaveSlotState {
         let mut slot = crate::runtime::globals::SaveSlotState::default();
         Self::stamp_slot_with_local_time(&mut slot);
         if let Some(snapshot) = self.ctx.local_save_snapshot.as_ref() {
@@ -8473,29 +8485,6 @@ impl<'a> SceneVm<'a> {
             slot.append_name = self.ctx.globals.append_name.clone();
         }
 
-        match req.kind {
-            RuntimeSaveKind::Normal => {
-                if self.ctx.globals.syscom.save_slots.len() <= req.index {
-                    self.ctx
-                        .globals
-                        .syscom
-                        .save_slots
-                        .resize_with(req.index + 1, Default::default);
-                }
-                self.ctx.globals.syscom.save_slots[req.index] = slot.clone();
-            }
-            RuntimeSaveKind::Quick => {
-                if self.ctx.globals.syscom.quick_save_slots.len() <= req.index {
-                    self.ctx
-                        .globals
-                        .syscom
-                        .quick_save_slots
-                        .resize_with(req.index + 1, Default::default);
-                }
-                self.ctx.globals.syscom.quick_save_slots[req.index] = slot.clone();
-            }
-            RuntimeSaveKind::End | RuntimeSaveKind::Inner => {}
-        }
         slot
     }
 
@@ -12451,7 +12440,7 @@ impl<'a> SceneVm<'a> {
             snapshot.local_ex_stream = refreshed_ex;
         }
 
-        let slot = self.ensure_runtime_slot_for_save(req);
+        let slot = self.runtime_slot_for_save();
         let Some(path) = self.runtime_save_file_path(req.kind, req.index) else {
             if req.kind == RuntimeSaveKind::Normal {
                 crate::runtime::forms::syscom::free_runtime_save_thumb_capture(
@@ -12508,31 +12497,14 @@ impl<'a> SceneVm<'a> {
         // tnm_save_local_on_file() clears C_tnm_save_cache before writing and
         // leaves that slot uncached.  Do not immediately repopulate the Rust
         // header cache from the file; the next metadata query must reload it.
-        match req.kind {
-            RuntimeSaveKind::Normal => {
-                if self.ctx.globals.syscom.save_slots.len() <= req.index {
-                    self.ctx
-                        .globals
-                        .syscom
-                        .save_slots
-                        .resize_with(req.index + 1, Default::default);
+        if let Some(kind) = Self::save_kind_to_original(req.kind) {
+            let layout =
+                crate::original_save::SaveSlotLayout::from_config(self.ctx.tables.gameexe.as_ref());
+            if let Some(no) = layout.file_no(kind, req.index) {
+                if let Some(slot) = self.ctx.globals.syscom.save_slots.get_mut(no) {
+                    slot.header_cache_valid = false;
                 }
-                self.ctx.globals.syscom.save_slots[req.index].header_cache_valid = false;
             }
-            RuntimeSaveKind::Quick => {
-                if self.ctx.globals.syscom.quick_save_slots.len() <= req.index {
-                    self.ctx
-                        .globals
-                        .syscom
-                        .quick_save_slots
-                        .resize_with(req.index + 1, Default::default);
-                }
-                self.ctx.globals.syscom.quick_save_slots[req.index].header_cache_valid = false;
-            }
-            RuntimeSaveKind::End => {
-                self.ctx.globals.syscom.end_save_exists = true;
-            }
-            RuntimeSaveKind::Inner => {}
         }
         if let Some(save_kind) = Self::save_kind_to_original(req.kind) {
             let save_no = crate::original_save::original_save_no(
@@ -14230,6 +14202,119 @@ mod command_dispatch_tests {
         let chunk = Box::leak(empty_scene_chunk().into_boxed_slice());
         let stream = SceneStream::new(chunk).expect("empty scene stream");
         SceneVm::new(stream, CommandContext::new(PathBuf::from(".")))
+    }
+
+    #[test]
+    fn native_file_writes_invalidate_every_alias_of_the_physical_slot() {
+        use crate::runtime::forms::codes::syscom_op::*;
+        let mut vm = test_vm();
+        let project =
+            std::env::temp_dir().join(format!("siglus-vm-slot-cache-{}", std::process::id()));
+        vm.ctx.project_dir = project.clone();
+        vm.ctx.tables.gameexe = Some(crate::formats::gameexe::GameexeConfig::from_text(
+            "#SAVE.CNT = 2\n#QUICK_SAVE.CNT = 1\n#END_SAVE.CNT = 1\n",
+        ));
+        let query = |vm: &mut SceneVm<'_>, op, index, string| {
+            vm.exec_command(
+                vec![vm.ctx.ids.form_global_syscom as i32, op],
+                0,
+                if string { vm.cfg.fm_str } else { vm.cfg.fm_int },
+                &mut vec![Value::Int(index)],
+            )
+            .unwrap();
+            if string {
+                Value::Str(vm.pop_str().unwrap())
+            } else {
+                Value::Int(vm.pop_int().unwrap() as i64)
+            }
+        };
+        assert_eq!(
+            query(&mut vm, GET_QUICK_SAVE_EXIST, 0, false).as_i64(),
+            Some(0)
+        );
+        assert_eq!(query(&mut vm, GET_SAVE_EXIST, 2, false).as_i64(), Some(0));
+        for (kind, index, physical, title) in [
+            (RuntimeSaveKind::Quick, 0, 2, "quick write"),
+            (RuntimeSaveKind::Normal, 2, 2, "absolute overwrite"),
+            (RuntimeSaveKind::End, 0, 3, "end write"),
+        ] {
+            vm.ctx.globals.syscom.current_save_scene_title = title.into();
+            vm.build_local_save_snapshot();
+            vm.perform_runtime_save_request(RuntimeSaveRequest { kind, index })
+                .unwrap();
+            assert_eq!(
+                query(&mut vm, GET_SAVE_TITLE, physical, true).as_str(),
+                Some(title)
+            );
+            if physical == 2 {
+                assert_eq!(
+                    query(&mut vm, GET_QUICK_SAVE_TITLE, 0, true).as_str(),
+                    Some(title)
+                );
+            } else {
+                assert_eq!(
+                    query(&mut vm, GET_END_SAVE_EXIST, 0, false).as_i64(),
+                    Some(1)
+                );
+            }
+        }
+        let end_file = project.join("savedata/0003.sav");
+        let before = std::fs::read(&end_file).unwrap();
+        vm.ctx.tables.gameexe = Some(crate::formats::gameexe::GameexeConfig::from_text(
+            "#SAVE.CNT = 2\n#QUICK_SAVE.CNT = 1\n#END_SAVE.CNT = 0\n",
+        ));
+        assert!(vm.runtime_save_file_path(RuntimeSaveKind::End, 0).is_none());
+        vm.perform_runtime_save_request(RuntimeSaveRequest {
+            kind: RuntimeSaveKind::End,
+            index: 0,
+        })
+        .unwrap();
+        assert_eq!(std::fs::read(end_file).unwrap(), before);
+        std::fs::remove_dir_all(project).unwrap();
+    }
+
+    #[test]
+    fn accepted_exit_saves_end_slot_only_when_enabled_and_a_savepoint_exists() {
+        for (enabled, snapshot) in [(true, true), (false, true), (true, false)] {
+            let mut vm = test_vm();
+            let project = std::env::temp_dir().join(format!(
+                "siglus-exit-save-{}-{enabled}-{snapshot}",
+                std::process::id()
+            ));
+            vm.ctx.project_dir = project.clone();
+            vm.ctx.tables.gameexe =
+                Some(crate::formats::gameexe::GameexeConfig::from_text(&format!(
+                    "#SAVE.CNT = 2\n#QUICK_SAVE.CNT = 1\n#END_SAVE.CNT = {}\n#SAVE_THUMB.USE = 0\n",
+                    usize::from(enabled)
+                )));
+            vm.ctx.globals.system.active_flag = true;
+            if snapshot {
+                vm.ctx.globals.syscom.current_save_scene_title = "story before exit".into();
+                vm.build_local_save_snapshot();
+            }
+            let end_file = project.join("savedata/0003.sav");
+            let stale = b"preserve disabled end save";
+            if !enabled {
+                std::fs::create_dir_all(end_file.parent().unwrap()).unwrap();
+                std::fs::write(&end_file, stale).unwrap();
+            }
+            vm.finish_game().unwrap();
+            assert!(!vm.ctx.globals.system.active_flag);
+            if enabled && snapshot {
+                let slot = crate::original_save::read_slot_from_path(&end_file).unwrap();
+                assert_eq!(slot.title, "story before exit");
+                let before = std::fs::read(&end_file).unwrap();
+                vm.ctx.globals.syscom.current_save_scene_title = "after exit".into();
+                vm.build_local_save_snapshot();
+                vm.finish_game().unwrap();
+                assert_eq!(std::fs::read(&end_file).unwrap(), before);
+            } else if !enabled {
+                assert_eq!(std::fs::read(&end_file).unwrap(), stale);
+            } else {
+                assert!(!end_file.exists());
+            }
+            std::fs::remove_dir_all(project).unwrap();
+        }
     }
 
     #[test]

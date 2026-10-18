@@ -1561,8 +1561,7 @@ impl SiglusHost {
                 }
                 ProcType::EndGame => {
                     self.flow.pop();
-                    crate::runtime::forms::syscom::write_global_save(&self.vm.ctx);
-                    self.vm.ctx.globals.system.active_flag = false;
+                    self.vm.finish_game()?;
                     continue;
                 }
                 ProcType::GameTimerStart => {
