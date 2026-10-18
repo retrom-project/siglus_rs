@@ -31,6 +31,57 @@ pub enum SaveKind {
     End,
 }
 
+/// Script SAVE/LOAD commands take an absolute file number. QUICK_* commands
+/// take an index within the quick region; END_* addresses its optional slot.
+/// See the original manual's quick-save supplement and end-save chapter.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct SaveSlotLayout {
+    pub normal_count: usize,
+    pub quick_count: usize,
+    pub end_enabled: bool,
+}
+
+impl SaveSlotLayout {
+    pub fn from_config(config: Option<&crate::formats::gameexe::GameexeConfig>) -> Self {
+        let count = |keys: [&str; 2], default, maximum| {
+            config
+                .and_then(|cfg| keys.iter().find_map(|key| cfg.get_usize(key)))
+                .unwrap_or(default)
+                .min(maximum)
+        };
+        Self {
+            normal_count: count(["#SAVE.CNT", "SAVE.CNT"], 10, 10000),
+            quick_count: count(["#QUICK_SAVE.CNT", "QUICK_SAVE.CNT"], 3, 10000),
+            end_enabled: count(["#END_SAVE.CNT", "END_SAVE.CNT"], 1, 1) != 0,
+        }
+    }
+
+    pub fn total_count(self) -> usize {
+        self.normal_count + self.quick_count + usize::from(self.end_enabled)
+    }
+
+    pub fn file_no(self, kind: SaveKind, index: usize) -> Option<usize> {
+        let count = match kind {
+            SaveKind::Normal => self.total_count(),
+            SaveKind::Quick => self.quick_count,
+            SaveKind::End => usize::from(self.end_enabled),
+        };
+        (index < count).then(|| original_save_no(self.normal_count, self.quick_count, kind, index))
+    }
+
+    pub fn script_file_no(self, quick: bool, index: i64) -> Option<usize> {
+        let index = usize::try_from(index).ok()?;
+        self.file_no(
+            if quick {
+                SaveKind::Quick
+            } else {
+                SaveKind::Normal
+            },
+            index,
+        )
+    }
+}
+
 #[derive(Debug, Clone, Copy)]
 enum LocalSaveLayout {
     CurrentEnvelope,

@@ -16,6 +16,16 @@ The save overlay exports real native files before checkpoint acknowledgement.
 Movie decoders keep bounded queues; selected compressed resources may still be
 assembled in memory by native resource decoders.
 
+Native save commands share a header cache indexed by physical file number.
+Generic save operations address ordinary, quick and enabled end-save slots;
+quick commands translate their relative index using the configured ordinary
+slot count. The end-save switch is respected without changing file offsets,
+native save bytes or the public checkpoint format. Accepted native exits also
+save the last SAVEPOINT to the enabled end slot before reporting exit to the host.
+Cancelled exits and title screens without a SAVEPOINT do not create progress.
+Asset-free regressions cover these aliases, range checks, metadata edits, file
+operations, cache invalidation and exit persistence.
+
 ## Build and test
 
 Use Rust 1.91.0 with target wasm32-unknown-unknown, Node 24.18.0, Python 3.11+
