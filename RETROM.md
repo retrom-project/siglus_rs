@@ -26,6 +26,12 @@ Cancelled exits and title screens without a SAVEPOINT do not create progress.
 Asset-free regressions cover these aliases, range checks, metadata edits, file
 operations, cache invalidation and exit persistence.
 
+Stage aliases BACK/FRONT/NEXT and STAGE[index] share the same command-tail
+parser for stage commands, child-list commands and indexed objects. Existing
+list operations supply their real results; EXCALL keeps its private stage
+owner. Asset-free VM regressions cover native command bytecode, distinct stage
+sizes, list resizing, nested objects, legacy chains and private-menu isolation.
+
 ## Build and test
 
 Use Rust 1.91.0 with target wasm32-unknown-unknown, Node 24.18.0, Python 3.11+
