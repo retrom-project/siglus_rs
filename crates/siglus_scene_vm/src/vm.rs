@@ -14173,6 +14173,10 @@ mod call_property_reference_tests {
 }
 
 #[cfg(test)]
+#[path = "vm/stage_alias_tests.rs"]
+mod stage_alias_tests;
+
+#[cfg(test)]
 mod command_dispatch_tests {
     use super::*;
     use crate::runtime::forms::codes::{

@@ -357,6 +357,35 @@ fn parse_mwnd_selection_args(
     out
 }
 
+fn parse_stage_tail(stage: i64, tail: &[i32], elm_array: i32) -> Option<StageTarget> {
+    match tail {
+        [op] => Some(StageTarget::StageOp {
+            stage,
+            op: *op as i64,
+        }),
+        [child, op] => Some(StageTarget::ChildListOp {
+            stage,
+            child: *child,
+            op: *op as i64,
+        }),
+        [child, array, idx] if *array == elm_array => Some(StageTarget::ChildItemRef {
+            stage,
+            child: *child,
+            idx: *idx as i64,
+        }),
+        [child, array, idx, op, tail @ ..] if *array == elm_array => {
+            Some(StageTarget::ChildItemOp {
+                stage,
+                child: *child,
+                idx: *idx as i64,
+                op: *op as i64,
+                tail: tail.to_vec(),
+            })
+        }
+        _ => None,
+    }
+}
+
 fn parse_target(ctx: &CommandContext, chain: &[i32]) -> Option<StageTarget> {
     if chain.is_empty() || !is_stage_form_id(ctx, chain[0]) {
         return None;
@@ -376,105 +405,61 @@ fn parse_target(ctx: &CommandContext, chain: &[i32]) -> Option<StageTarget> {
     };
     let objectlist_get_size = constants::OBJECTLIST_GET_SIZE;
     let objectlist_resize = constants::OBJECTLIST_RESIZE;
-    if chain.len() < 4 || chain[1] != elm_array {
-        // Global aliases are concrete stages in the original engine:
-        // BACK=0, FRONT=1, NEXT=2. Do not collapse FRONT/NEXT into BACK.
-        if chain.len() >= 4
-            && chain[2] == elm_array
-            && let Some(stage) = global_stage_alias_to_index(chain[0] as u32)
-        {
-            if chain.len() == 4 {
-                return Some(StageTarget::ChildItemRef {
-                    stage,
-                    child: chain[1],
-                    idx: chain[3] as i64,
-                });
+
+    // Concrete global stages and STAGE[index] share every command suffix,
+    // including list operations without an item index. Keep the raw owner in
+    // `chain` so EXCALL's private stage storage remains separate.
+    if let Some(stage) = global_stage_alias_to_index(chain[0] as u32) {
+        return parse_stage_tail(stage, &chain[1..], elm_array);
+    }
+    if chain.len() >= 3 && chain[1] == elm_array {
+        return parse_stage_tail(chain[2] as i64, &chain[3..], elm_array);
+    }
+
+    // Same-version decomp-confirmed testcase shape:
+    // [FORM_STAGE_ALIAS, child_code, ELM_ARRAY, stage_idx, ...]
+    if chain.len() >= 4 && chain[2] == elm_array {
+        let child = chain[1];
+        let stage = chain[3] as i64;
+        if chain.len() == 4 {
+            return Some(StageTarget::ChildListOp {
+                stage,
+                child,
+                op: 0,
+            });
+        }
+        if child == stage_object && chain.len() >= 5 {
+            let op = chain[4] as i64;
+            let tail = chain.get(5..).unwrap_or(&[]).to_vec();
+            if chain.len() == 5
+                && (op as i32 == objectlist_get_size || op as i32 == objectlist_resize)
+            {
+                return Some(StageTarget::ChildListOp { stage, child, op });
             }
             return Some(StageTarget::ChildItemOp {
                 stage,
-                child: chain[1],
-                idx: chain[3] as i64,
-                op: chain[4] as i64,
-                tail: chain.get(5..).unwrap_or(&[]).to_vec(),
+                child,
+                idx: 0,
+                op,
+                tail,
             });
         }
-        // Same-version decomp-confirmed testcase shape:
-        // [FORM_STAGE_ALIAS, child_code, ELM_ARRAY, stage_idx, ...]
-        if chain.len() >= 4 && chain[2] == elm_array {
-            let child = chain[1];
-            let stage = chain[3] as i64;
-            if chain.len() == 4 {
-                return Some(StageTarget::ChildListOp {
-                    stage,
-                    child,
-                    op: 0,
-                });
-            }
-            if child == stage_object && chain.len() >= 5 {
-                let op = chain[4] as i64;
-                let tail = chain.get(5..).unwrap_or(&[]).to_vec();
-                if chain.len() == 5
-                    && (op as i32 == objectlist_get_size || op as i32 == objectlist_resize)
-                {
-                    return Some(StageTarget::ChildListOp { stage, child, op });
-                }
-                return Some(StageTarget::ChildItemOp {
-                    stage,
-                    child,
-                    idx: 0,
-                    op,
-                    tail,
-                });
-            }
-            if chain.len() == 5 {
-                return Some(StageTarget::ChildListOp {
-                    stage,
-                    child,
-                    op: chain[4] as i64,
-                });
-            }
-            if chain.len() >= 7 && chain[5] == elm_array {
-                return Some(StageTarget::ChildItemOp {
-                    stage,
-                    child,
-                    idx: chain[6] as i64,
-                    op: chain[4] as i64,
-                    tail: chain.get(7..).unwrap_or(&[]).to_vec(),
-                });
-            }
+        if chain.len() == 5 {
+            return Some(StageTarget::ChildListOp {
+                stage,
+                child,
+                op: chain[4] as i64,
+            });
         }
-        return None;
-    }
-    let stage = chain[2] as i64;
-    if chain.len() == 4 {
-        return Some(StageTarget::StageOp {
-            stage,
-            op: chain[3] as i64,
-        });
-    }
-    let child = chain[3];
-    if chain.len() == 5 {
-        return Some(StageTarget::ChildListOp {
-            stage,
-            child,
-            op: chain[4] as i64,
-        });
-    }
-    if chain.len() >= 7 && chain[4] == elm_array {
-        return Some(StageTarget::ChildItemOp {
-            stage,
-            child,
-            idx: chain[5] as i64,
-            op: chain[6] as i64,
-            tail: chain.get(7..).unwrap_or(&[]).to_vec(),
-        });
-    }
-    if chain.len() == 6 && chain[4] == elm_array {
-        return Some(StageTarget::ChildItemRef {
-            stage,
-            child,
-            idx: chain[5] as i64,
-        });
+        if chain.len() >= 7 && chain[5] == elm_array {
+            return Some(StageTarget::ChildItemOp {
+                stage,
+                child,
+                idx: chain[6] as i64,
+                op: chain[4] as i64,
+                tail: chain.get(7..).unwrap_or(&[]).to_vec(),
+            });
+        }
     }
     None
 }
@@ -15672,12 +15657,13 @@ pub fn dispatch(ctx: &mut CommandContext, args: &[Value]) -> Result<bool> {
             Ok(true)
         }
         StageTarget::StageOp { stage, op } => {
-            with_stage_state(ctx, form_id, |ctx, st| match op as i32 {
+            let handled = with_stage_state(ctx, form_id, |ctx, st| match op as i32 {
                 0 => {
                     let n = script_args.first().and_then(as_i64).unwrap_or(0).max(0) as usize;
                     sg_debug_stage!("stage={} CREATE_OBJECT resize {}", stage, n);
                     resize_stage_object_list_like_cpp(ctx, st, stage, n);
                     ctx.stack.push(Value::Int(0));
+                    true
                 }
                 1 => {
                     let n = script_args.first().and_then(as_i64).unwrap_or(0).max(0) as usize;
@@ -15695,20 +15681,11 @@ pub fn dispatch(ctx: &mut CommandContext, args: &[Value]) -> Result<bool> {
                         ensure_mwnd(ctx, st, stage, i);
                     }
                     ctx.stack.push(Value::Int(0));
+                    true
                 }
-                _ => {
-                    if let Some(rf) = ret_form {
-                        if rf != 0 {
-                            ctx.stack.push(default_for_ret_form(rf));
-                        } else {
-                            ctx.stack.push(Value::Int(0));
-                        }
-                    } else {
-                        ctx.stack.push(Value::Int(0));
-                    }
-                }
+                _ => false,
             });
-            Ok(true)
+            Ok(handled)
         }
         StageTarget::ChildListOp { stage, child, op } => {
             let stage_elm_object = ctx.ids.stage_elm_object;
