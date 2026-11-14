@@ -614,13 +614,13 @@ pub(crate) fn open_game_file(path: &Path) -> Result<fs::File> {
 /// case-insensitive lookup semantics as the rest of the Siglus game VFS.
 ///
 /// Native hosts can query filesystem metadata directly after resolution.  The
-/// browser target has no meaningful `std::fs::Metadata`, so use the VFS bytes
+/// browser target has no meaningful `std::fs::Metadata`, so use the VFS metadata
 /// instead.  Callers that only need the file length must use this helper rather
 /// than depending on a host-specific metadata type.
 pub(crate) fn game_file_len(path: &Path) -> Result<u64> {
     #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
     {
-        return Ok(read_file_bytes(path)?.len() as u64);
+        return crate::wasm_vfs::WasmDirectoryVfs::new().file_len(&path_to_wasm_vfs(path));
     }
 
     #[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]

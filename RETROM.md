@@ -26,6 +26,19 @@ Cancelled exits and title screens without a SAVEPOINT do not create progress.
 Asset-free regressions cover these aliases, range checks, metadata edits, file
 operations, cache invalidation and exit persistence.
 
+Native global-save import also accepts version 1.3 using the validated common
+field layout. Configuration version 1.1 accepts both five and 32 audio categories;
+each candidate must consume the complete record before settings are applied.
+Absent categories retain their defaults, and invalid or ambiguous layouts fail
+without applying partial settings. These readers preserve bundled native saves
+without changing the public checkpoint format or selecting behavior by game name.
+
+Browser OVK playback reads and validates the pack index, then reads only the
+selected compressed voice or BGM entry through bounded VFS ranges. Native and
+browser paths share the index parser; immutable content blocks use the host's
+existing bounded cache. File-length queries use metadata without reading file
+bytes. The serialized JSPI entry queue and native save contract are unchanged.
+
 Stage aliases BACK/FRONT/NEXT and STAGE[index] share the same command-tail
 parser for stage commands, child-list commands and indexed objects. Existing
 list operations supply their real results; EXCALL keeps its private stage
