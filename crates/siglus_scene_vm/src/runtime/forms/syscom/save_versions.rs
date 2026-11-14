@@ -79,10 +79,46 @@ fn read_config_v1_1(
     rd: &mut OriginalStreamReader<'_>,
     cfg: &mut OriginalConfigRuntimeState,
 ) -> Result<()> {
+    // Native 1.1 files exist with five and 32 audio categories. A complete
+    // layout must validate before any restored settings become visible.
+    let mut matched = None;
+    let mut errors = Vec::new();
+    for sound_count in [5, 32] {
+        let mut candidate_rd = rd.clone();
+        let mut candidate_cfg = cfg.clone();
+        match read_config_v1_1_layout(&mut candidate_rd, &mut candidate_cfg, sound_count) {
+            Ok(()) => {
+                ensure!(matched.is_none(), "ambiguous config save 1.1 audio layout");
+                matched = Some((candidate_rd, candidate_cfg));
+            }
+            Err(error) => errors.push(format!("{sound_count} channels: {error:#}")),
+        }
+    }
+    let Some((candidate_rd, candidate_cfg)) = matched else {
+        bail!(
+            "config save 1.1 matches neither audio layout: {}",
+            errors.join("; ")
+        );
+    };
+    *rd = candidate_rd;
+    *cfg = candidate_cfg;
+    Ok(())
+}
+
+fn read_config_v1_1_layout(
+    rd: &mut OriginalStreamReader<'_>,
+    cfg: &mut OriginalConfigRuntimeState,
+    sound_count: usize,
+) -> Result<()> {
     read_screen_v1_0(rd, cfg)?;
-    read_config_common(rd, cfg, 32)?;
+    read_config_common(rd, cfg, sound_count)?;
     read_config_flags(rd, cfg)?;
-    read_config_paths_with_voice(rd, cfg)
+    read_config_paths_with_voice(rd, cfg)?;
+    ensure!(
+        rd.remaining().is_empty(),
+        "unexpected trailing config save 1.1 data"
+    );
+    Ok(())
 }
 
 fn read_config_v1_2(
@@ -298,6 +334,7 @@ pub(super) fn read_global(
     let mut rd = OriginalStreamReader::new(payload);
     match (header.major_version, header.minor_version) {
         (1, 2) => read_global_v1_2(&mut rd),
+        (1, 3) => read_global_v1_3(&mut rd),
         (1, 5) => read_global_v1_5(&mut rd),
         (2, 0) => read_global_v2_0(&mut rd),
         (major, minor) => bail!("unsupported global save version {major}.{minor}"),
@@ -306,6 +343,10 @@ pub(super) fn read_global(
 
 fn read_global_v1_2(rd: &mut OriginalStreamReader<'_>) -> Result<GlobalSaveData> {
     // Hatsuyuki Sakura: verified against the native 1.2 save.
+    read_global_common(rd)
+}
+
+fn read_global_v1_3(rd: &mut OriginalStreamReader<'_>) -> Result<GlobalSaveData> {
     read_global_common(rd)
 }
 

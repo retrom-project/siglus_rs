@@ -5878,6 +5878,7 @@ mod global_save_init_tests {
         for (minor_version, planetarian, sound_count) in [
             (0, false, 4),
             (0, false, 5),
+            (1, false, 5),
             (1, false, 32),
             (2, false, 32),
             (2, true, 32),
@@ -6001,7 +6002,7 @@ mod global_save_init_tests {
                     .iter()
                     .all(|&value| value == 200)
             );
-            if minor_version == 0 {
+            if sound_count < cfg.sound_user_volume.len() {
                 assert_eq!(
                     &cfg.sound_user_volume[sound_count..],
                     &defaults.sound_user_volume[sound_count..]
@@ -6075,10 +6076,13 @@ mod global_save_init_tests {
             );
             let mut trailing = payload.clone();
             trailing.push(0);
+            let mut rejected = defaults.clone();
             assert!(
-                save_versions::read_config(header, &trailing, &mut defaults.clone(), &game_id)
-                    .is_err()
+                save_versions::read_config(header, &trailing, &mut rejected, &game_id).is_err()
             );
+            if minor_version == 1 {
+                assert_eq!(rejected, defaults, "invalid layout must not apply settings");
+            }
             let unknown = original_save::OriginalConfigSaveHeader {
                 minor_version: 99,
                 ..header
@@ -6232,7 +6236,7 @@ mod global_save_init_tests {
 
     #[test]
     fn original_global_save_uses_one_byte_character_voice_flags() {
-        for (major, minor) in [(1, 2), (1, 5), (2, 0)] {
+        for (major, minor) in [(1, 2), (1, 3), (1, 5), (2, 0)] {
             for empty_cg in [false, true] {
                 check_original_global_save(major, minor, empty_cg);
             }

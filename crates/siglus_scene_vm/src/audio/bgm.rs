@@ -206,63 +206,18 @@ fn read_audio_container_bytes(path: &Path) -> Result<Vec<u8>> {
 }
 
 #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
-fn parse_ovk_entries_from_bytes(bytes: &[u8]) -> Result<Vec<ovk::OvkEntry>> {
-    if bytes.len() < 4 {
-        bail!("OVK: header too small");
-    }
-    let count = u32::from_le_bytes(bytes[0..4].try_into().unwrap()) as usize;
-    if count == 0 {
-        bail!("OVK: zero entries");
-    }
-    let table_len = 4usize.saturating_add(count.saturating_mul(16));
-    if table_len > bytes.len() {
-        bail!("OVK: entry table truncated");
-    }
-    let mut entries = Vec::with_capacity(count);
-    for i in 0..count {
-        let off = 4 + i * 16;
-        let size = u32::from_le_bytes(bytes[off..off + 4].try_into().unwrap());
-        let offset = u32::from_le_bytes(bytes[off + 4..off + 8].try_into().unwrap());
-        let no = u32::from_le_bytes(bytes[off + 8..off + 12].try_into().unwrap());
-        let sample_count = u32::from_le_bytes(bytes[off + 12..off + 16].try_into().unwrap());
-        let end = (offset as usize).saturating_add(size as usize);
-        if size != 0 && end > bytes.len() {
-            bail!(
-                "OVK entry[{i}] out of range: offset={} size={} len={}",
-                offset,
-                size,
-                bytes.len()
-            );
-        }
-        entries.push(ovk::OvkEntry {
-            size,
-            offset,
-            no,
-            sample_count,
-        });
-    }
-    Ok(entries)
-}
-
-#[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
-fn extract_ovk_entry_from_bytes(bytes: &[u8], idx: usize) -> Result<Vec<u8>> {
-    let entries = parse_ovk_entries_from_bytes(bytes)?;
-    let entry = entries.get(idx).copied().ok_or_else(|| {
-        anyhow::anyhow!(
-            "OVK entry out of range: idx={} entries={}",
-            idx,
-            entries.len()
-        )
+fn read_ovk_entry(
+    input: &Path,
+    select: impl FnOnce(&ovk::OvkIndex) -> Result<usize>,
+) -> Result<Vec<u8>> {
+    let path = input.to_string_lossy();
+    let vfs = crate::wasm_vfs::WasmDirectoryVfs::new();
+    let index = ovk::OvkIndex::read(vfs.file_len(&path)?, |offset, length| {
+        vfs.read_range(&path, offset, length)
     })?;
-    if entry.size == 0 {
-        bail!("OVK entry[{idx}] has zero size");
-    }
-    let start = entry.offset as usize;
-    let end = start.saturating_add(entry.size as usize);
-    if end > bytes.len() {
-        bail!("OVK entry[{idx}] out of range");
-    }
-    Ok(bytes[start..end].to_vec())
+    index.extract_entry(select(&index)?, |offset, length| {
+        vfs.read_range(&path, offset, length)
+    })
 }
 
 #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
@@ -421,8 +376,7 @@ pub fn decode_bgm_to_wav_bytes(
             let idx = entry_idx.unwrap_or(0);
             #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
             {
-                let bytes = read_audio_container_bytes(input)?;
-                let ogg = extract_ovk_entry_from_bytes(&bytes, idx).context("extract OVK entry")?;
+                let ogg = read_ovk_entry(input, |_| Ok(idx)).context("extract OVK entry")?;
                 let wav_bytes =
                     siglus_assets::vorbis::decode_ogg_vorbis_reader_to_wav(Cursor::new(ogg))
                         .context("decode OVK(entry) -> WAV")?;
@@ -514,19 +468,19 @@ pub fn decode_ovk_entry_by_no_to_wav_bytes(
     let input = resolved.as_path();
     #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
     {
-        let bytes = read_audio_container_bytes(input)?;
-        let entries = parse_ovk_entries_from_bytes(&bytes)?;
-        let idx = entries
-            .iter()
-            .position(|e| e.no == entry_no)
-            .with_context(|| {
-                format!(
-                    "OVK entry not found: no={} file={}",
-                    entry_no,
-                    input.display()
-                )
-            })?;
-        let ogg = extract_ovk_entry_from_bytes(&bytes, idx)?;
+        let ogg = read_ovk_entry(input, |index| {
+            index
+                .entries()
+                .iter()
+                .position(|e| e.no == entry_no)
+                .with_context(|| {
+                    format!(
+                        "OVK entry not found: no={} file={}",
+                        entry_no,
+                        input.display()
+                    )
+                })
+        })?;
         let wav_bytes = siglus_assets::vorbis::decode_ogg_vorbis_reader_to_wav(Cursor::new(ogg))
             .with_context(|| format!("decode OVK(entry no={entry_no}) -> WAV"))?;
         Ok(BgmDecoded {
@@ -581,8 +535,7 @@ pub fn extract_ogg_bytes(
             let idx = entry_idx.unwrap_or(0);
             #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
             {
-                let bytes = read_audio_container_bytes(input)?;
-                let ogg = extract_ovk_entry_from_bytes(&bytes, idx).context("extract OVK entry")?;
+                let ogg = read_ovk_entry(input, |_| Ok(idx)).context("extract OVK entry")?;
                 Ok((ogg, format!("OVK:{}[{}]", input.display(), idx)))
             }
             #[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]

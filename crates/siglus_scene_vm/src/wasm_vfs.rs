@@ -79,6 +79,42 @@ impl WasmDirectoryVfs {
     pub fn known_file_count(&self) -> u32 {
         siglus_known_file_count()
     }
+
+    pub fn file_len(&self, path: &str) -> Result<u64> {
+        let normalized = normalize_siglus_path(path);
+        if normalized.is_empty() || !siglus_file_exists(&normalized) {
+            bail!("wasm resource not found: {normalized}");
+        }
+        let size = siglus_file_size(&normalized);
+        if !size.is_finite() || size < 0.0 || size.fract() != 0.0 || size > 9_007_199_254_740_991.0
+        {
+            bail!("invalid browser resource size: {normalized}");
+        }
+        Ok(size as u64)
+    }
+
+    /// Read only the requested range, with bounded calls across the JSPI bridge.
+    pub fn read_range(&self, path: &str, offset: u64, length: usize) -> Result<Vec<u8>> {
+        let normalized = normalize_siglus_path(path);
+        let file_len = self.file_len(&normalized)?;
+        if offset > file_len || length as u64 > file_len - offset {
+            bail!("browser resource range out of bounds: {normalized}");
+        }
+        let mut out = Vec::new();
+        out.try_reserve_exact(length)
+            .context("browser resource range is too large to decode")?;
+        out.resize(length, 0);
+        for (i, chunk) in out.chunks_mut(256 * 1024).enumerate() {
+            let start = offset + (i * 256 * 1024) as u64;
+            let arr = siglus_read_file_range(&normalized, start as f64, chunk.len() as u32)
+                .map_err(js_io_error)?;
+            if arr.length() as usize != chunk.len() {
+                bail!("truncated browser resource range: {normalized}");
+            }
+            arr.copy_to(chunk);
+        }
+        Ok(out)
+    }
 }
 
 impl SiglusVfs for WasmDirectoryVfs {
@@ -104,33 +140,9 @@ impl SiglusVfs for WasmDirectoryVfs {
     }
 
     fn read_all(&self, path: &str) -> Result<Vec<u8>> {
-        let normalized = normalize_siglus_path(path);
-        if normalized.is_empty() {
-            bail!("empty wasm resource path");
-        }
-        if !siglus_file_exists(&normalized) {
-            bail!("wasm resource not found: {normalized}");
-        }
-
-        let size = siglus_file_size(&normalized);
-        if !size.is_finite() || size < 0.0 || size.fract() != 0.0 || size > usize::MAX as f64 {
-            bail!("invalid browser resource size: {normalized}");
-        }
-        let len = size as usize;
-        let mut out = Vec::new();
-        out.try_reserve_exact(len)
+        let length = usize::try_from(self.file_len(path)?)
             .context("browser resource is too large to decode as a whole file")?;
-        out.resize(len, 0);
-        for start in (0..len).step_by(256 * 1024) {
-            let end = (start + 256 * 1024).min(len);
-            let arr = siglus_read_file_range(&normalized, start as f64, (end - start) as u32)
-                .map_err(js_io_error)?;
-            if arr.length() as usize != end - start {
-                bail!("truncated browser resource range: {normalized}");
-            }
-            arr.copy_to(&mut out[start..end]);
-        }
-        Ok(out)
+        self.read_range(path, 0, length)
     }
 
     fn list_dir(&self, path: &str) -> Result<Vec<String>> {
